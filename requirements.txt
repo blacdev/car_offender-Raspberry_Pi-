@@ -1,0 +1,14 @@
+asgiref
+certifi
+charset-normalizer
+idna
+numpy
+opencv-python
+Pillow
+python-magic
+pytz
+requests
+RPi.GPIO
+sqlparse
+urllib3
+pyhik
