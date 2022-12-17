@@ -20,6 +20,7 @@ STREAMING_URL = config("STREAMING_URL")
 # ret, frame = cap.read()
 
 
+
 # # If the frame was successfully captured, display it
 # if ret:
 #     cv2.imwrite("image.jpg", frame)
