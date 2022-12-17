@@ -1,4 +1,0 @@
-docker0
-blac Network
-blac's Phone
-Wired connection 1
