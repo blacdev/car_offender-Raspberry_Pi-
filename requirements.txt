@@ -12,3 +12,5 @@ RPi.GPIO
 sqlparse
 urllib3
 pyhik
+python-decouple
+python-dotenv

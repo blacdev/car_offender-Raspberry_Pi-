@@ -10,39 +10,43 @@ When IR_2 is High,camera 1 takes picture of the car and the ultrasonic sensors 3
 """
 
 from timeit import default_timer as timer
-import time
+
 from datetime import timedelta
 import RPi.GPIO as GPIO
 import requests
-import pygame
-import pygame.camera
-import glob
+import cv2
+from uuid import uuid4
 import os
-import base64
-import json
+from decouple import config
 from time import sleep
+# from dotenv import load_dotenv
+from app_utils.camera import STREAMING_URL
 
-fixed_time = 0.99
-fixed_distance = 11 # This will be calculated to fit the length used for the body of the vehicle
+fixed_time = config("FIXED_TIME")
+fixed_distance = config("FIXED_DISTANCE")
+image_path = os.path.realpath(config("IMAGE_PATH"))
 
-# Initialize camera
-pygame.init()
-pygame.camera.init()
+if os.path.exists(image_path) is False:
+    os.makedirs(image_path)
+
+
+url = config("URL")
+
+# Initialize camera with cv2 
+cam = cv2.VideoCapture(STREAMING_URL)
+
+#  Read the first frame
+ret, frame = cam.read()
 
 # image pixel size
 width, height = 320, 240
 
-# camera
-cam_1 = pygame.camera.Camera("/dev/video2", (width, height))
-cam_2 = pygame.camera.Camera("/dev/video0", (width, height))
+# generate random image name
+def get_image():
+    image_name = str(uuid4()) + ".jpg"
+    return image_name
 
-window = pygame.display.set_mode((width, height), pygame.RESIZABLE)
-window1 = pygame.display.set_mode((width, height), pygame.RESIZABLE)
-
-# start cameras
-cam_1.start()
-cam_2.start()
-
+print(image_path +"/"+ get_image())
 #  This allows us use the numbers printed on the board to refrence the pin to be used.
 GPIO.setmode(GPIO.BCM)
 
@@ -62,109 +66,75 @@ GPIO.setup(ir_4, GPIO.IN)
 
 
 
-def incoming_traffic(time, image):
+
+def traffic(time:float, image_path:str, image_name:str):
     
-    window.blit(image, (0, 0))
-    image = pygame.image.save(window, "left/image.jpg")
+
+    # image = cv2.imwrite("/home/pi/Desktop/Rasberry_Pi-code/images/image.jpg", frame)
 
     speed = fixed_distance / time
 
     if time > fixed_time:
         is_speeding = False
-        os.remove("/home/pi/Desktop/Rasberry_Pi-code/left/image.jpg")
+        os.remove(image_path +"/"+ image_name)
         
 
-    if time < fixed_time:
-        url = "https://road-traffic-offender.herokuapp.com/file/upload/"
-        payload ={"speed": int(speed), "is_speeding": True}
-        files = [("image", ("image.jpg", open("/home/pi/Desktop/Rasberry_Pi-code/left/image.jpg", "rb"), "image/jpg"))]
-        headers = {}
-        response = requests.request("POST", url, headers=headers, data=payload, files = files)
-        print(response.content)
-        if response.status_code == 201:
-            os.remove("/home/pi/Desktop/Rasberry_Pi-code/left/image.jpg")
+    elif time < fixed_time:
 
-
-def outgoing_traffic(time, image):
-    #  This is where the command for taking pictures will seat . The name of the picture will be the speed
-    
-    window.blit(image, (0, 0))
-
-    pygame.image.save(window, "right/image2.jpg")
-
-    speed = fixed_distance / time
-
-
-    if time > fixed_time:
-        is_speeding = False
-        removing_files = glob.glob("right/image2.jpg")
-        for i in removing_files:
-            os.remove(i)
-        
-        
-
-    if time < fixed_time:
-
-        url = "https://road-traffic-offender.herokuapp.com/file/upload/"
+        url = url
 
         payload ={"speed": int(speed), "is_speeding": True}
-        files = [("image", ("image2.jpg", open("/home/pi/Desktop/Rasberry_Pi-code/right/image2.jpg", "rb"), "image/jpg"))]
+
+        files = [("image", (image_name, open(image_path +"/"+ image_name, "rb"), image_name))]
+
         headers = {}
 
         response = requests.request("POST", url, headers=headers, data=payload, files = files)
 
         print(response.content)
+
+
         if response.status_code == 201:
-            os.remove("/home/pi/Desktop/Rasberry_Pi-code/right/image2.jpg")
+            os.remove(image_path +"/"+ image_name)
 
 
+
+
+# send image path into the function
 
 
 
 while True:
-    state= GPIO.input(ir_1)
+    state1= GPIO.input(ir_1)
     state2 = GPIO.input(ir_2)
 
-    if state == 0:
-        image = cam_1.get_image()
+    if state1 == 0 and state2 == 0:
+        image = cv2.imwrite(image_path +"/" + get_image(), frame)
         start = timer()
-        state = 1
+        state1 = 1
+        state2 = 1
 
 		
         try:
             state3 = GPIO.input(ir_3)
-            result = 1
-            while  state3 == result:
-                state3 = GPIO.input(ir_3)
-            stop = timer()
-            state3 = 2
-
-            time = float(timedelta(seconds=stop - start).total_seconds())  
-            incoming_traffic(time, image)
-
-            sleep(.001)
-        except:
-            continue
-	
-	
-
-    elif state2 == 0:
-        image = cam_2.get_image()
-        start = timer()
-
-        state2 = 1
-        try:
             state4 = GPIO.input(ir_4)
+
             result = 1
-            while  state4 == result:
-                state4 = GPIO.input(ir_4)
+
+            while  state3 == result and state4 == result:
+                state3, state4 = GPIO.input(ir_3), GPIO.input(ir_4)
+
             stop = timer()
-            state3 = 2
- 
-            time = float(timedelta(seconds=stop - start).total_seconds())  
-            outgoing_traffic(time, image)
+            
+            state3 = 1
+            state4 = 1
+
+            Time = float(timedelta(seconds=stop - start).total_seconds())  
+            traffic(Time, image_path, image)
+
             sleep(.001)
         except:
             continue
+	
 	
 GPIO.cleanup()
