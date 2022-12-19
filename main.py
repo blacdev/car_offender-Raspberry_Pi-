@@ -24,55 +24,51 @@ from time import sleep
 from app_utils.camera import STREAMING_URL
 
 
-#os.run("sudo ifconfig 192.168.1.65 netmask 255.255.255.0")
-fixed_time = config("FIXED_TIME")
-fixed_distance = config("FIXED_DISTANCE")
+os.system("sudo ifconfig eth0 192.168.1.65 netmask 255.255.255.0")
+os.system("sudo ip route del default via 192.168.1.1 dev eth0")
+fixed_time = float(config("FIXED_TIME"))
+fixed_distance = float(config("FIXED_DISTANCE"))
 image_path = os.path.realpath(config("IMAGE_PATH"))
 
 if os.path.exists(image_path) is False:
     os.makedirs(image_path)
 
 
-url = config("URL")
+url = "https://5099-102-89-22-78.eu.ngrok.io/offenders/api/post/"
 
-
-
-# image pixel size
-width, height = 320, 240
 
 # generate random image name
 def get_image():
     image_name = str(uuid4()) + ".jpg"
     return image_name
 
-#print(image_path +"/"+ get_image())
+
 #  This allows us use the numbers printed on the board to refrence the pin to be used.
 GPIO.setmode(GPIO.BCM)
 
 # GPIO pin setup
-GPIO.setwarnings(False)
+#GPIO.setwarnings(False)
 
 
 #  Initializing IR sensors one and two
 GPIO.setmode(GPIO.BCM)
 
-ir_2, ir_1, ir_3, ir_4 = 2, 27, 4, 17
+ir_1, ir_2 = 2, 27
 
 GPIO.setup(ir_1, GPIO.IN)
 GPIO.setup(ir_2, GPIO.IN)
-GPIO.setup(ir_3, GPIO.IN)
-GPIO.setup(ir_4, GPIO.IN)
 
 
 
 
 def traffic(time:float, image_path:str, image_name:str):
     
-
+    print("got here")
     # image = cv2.imwrite("/home/pi/Desktop/Rasberry_Pi-code/images/image.jpg", frame)
 
-    speed = fixed_distance / time
-
+    speed = int(float(fixed_distance / time))
+    
+    print("speed is:", speed)
     if time > fixed_time:
         is_speeding = False
         os.remove(image_path +"/"+ image_name)
@@ -80,24 +76,25 @@ def traffic(time:float, image_path:str, image_name:str):
 
     elif time < fixed_time:
 
-        url = url
+        print("Vehicle overspeeding!!!")
+        
+        print("uploading to database...")
 
-        payload ={"speed": int(speed), "is_speeding": True}
 
-        files = [("image", (image_name, open(image_path +"/"+ image_name, "rb"), image_name))]
-
+        files = [("image", (image_name,open(image_path + "/" + image_name, "rb"), "image/jpeg"))]
+        
         headers = {}
 
-        response = requests.request("POST", url, headers=headers, data=payload, files = files)
+        response = requests.post(url + f"{speed}/{True}", headers=headers, files=files)
+        print(response.text)
 
-        print(response.content)
 
-
-        if response.status_code == 201:
+        if response.status_code == 200:
             os.remove(image_path +"/"+ image_name)
+            print("Upload complete")
 
 
-def snapimage():
+def snapimage(image_name, image_path):
     
     # Initialize camera with cv2 
     cam = cv2.VideoCapture(STREAMING_URL)
@@ -105,12 +102,12 @@ def snapimage():
     #  Read the first frame
     ret, frame = cam.read()
     if ret:
-        image_path_name = image_path +"/" + get_image()
-        image = cv2.imwrite(image_path_name, frame)
+        
+        image = image_path +"/" + image_name
+        image = cv2.imwrite(image, frame)
         
         cam.release()
-        return image_path_name
-    return
+
 
 # send image path into the function
 
@@ -118,37 +115,37 @@ def snapimage():
 
 while True:
     
-
-
-    
     state1= GPIO.input(ir_1)
-    state2 = GPIO.input(ir_2)
     
-    print(state1)
-    if state1 == 0 and state2 == 0:
+    
+    if state1 == 0:
+        image_name= get_image()
+        print("Vehicle detected!")
+        print("Capturing...")
         
-        image = snapimage()
+        image = snapimage(image_name, image_path)
+        
+        #print("Calculating speed")
+        
         start = timer()
         state1 = 1
-        state2 = 1
+        
 
-		
         try:
-            state3 = GPIO.input(ir_3)
-            state4 = GPIO.input(ir_4)
+            state2 = GPIO.input(ir_2)
 
             result = 1
 
-            while  state3 == result and state4 == result:
-                state3, state4 = GPIO.input(ir_3), GPIO.input(ir_4)
+            while  state2 == result:
+                state2 = GPIO.input(ir_2)
 
             stop = timer()
             
-            state3 = 1
-            state4 = 1
+            state2 = 1
 
             Time = float(timedelta(seconds=stop - start).total_seconds())  
-            traffic(Time, image_path, image)
+            print(Time)
+            traffic(Time, image_path, image_name)
 
             #sleep(.001)
         except:
